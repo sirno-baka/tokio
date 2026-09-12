@@ -63,7 +63,7 @@ macro_rules! cfg_unix {
 macro_rules! cfg_unix_or_wasi {
     ($($item:item)*) => {
         $(
-            #[cfg(any(all(doc, docsrs), unix, target_os = "wasi"))]
+            #[cfg(any(all(doc, docsrs), unix, target_os = "popugos", target_os = "wasi"))]
             #[cfg_attr(docsrs, doc(cfg(any(unix, target_os = "wasi"))))]
             $item
         )*

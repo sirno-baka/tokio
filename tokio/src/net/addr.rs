@@ -166,6 +166,7 @@ cfg_net! {
         type Future = sealed::MaybeReady;
 
         fn to_socket_addrs(&self, _: sealed::Internal) -> Self::Future {
+            #[cfg(not(target_os = "popugos"))]
             use crate::blocking::spawn_blocking;
             use sealed::MaybeReady;
 
@@ -176,12 +177,24 @@ cfg_net! {
                 return MaybeReady(sealed::State::Ready(Some(addr)));
             }
 
-            // Run DNS lookup on the blocking pool
             let s = self.to_owned();
 
-            MaybeReady(sealed::State::Blocking(spawn_blocking(move || {
-                std::net::ToSocketAddrs::to_socket_addrs(&s)
-            })))
+            // PopugOS currently has no OS thread spawning backend. Its std
+            // resolver is a small synchronous UDP client, so resolve inline
+            // instead of trying to create Tokio's blocking worker thread.
+            #[cfg(target_os = "popugos")]
+            {
+                return MaybeReady(sealed::State::ReadyMany(Some(
+                    std::net::ToSocketAddrs::to_socket_addrs(&s),
+                )));
+            }
+
+            #[cfg(not(target_os = "popugos"))]
+            {
+                MaybeReady(sealed::State::Blocking(spawn_blocking(move || {
+                    std::net::ToSocketAddrs::to_socket_addrs(&s)
+                })))
+            }
         }
     }
 
@@ -194,6 +207,7 @@ cfg_net! {
         type Future = sealed::MaybeReady;
 
         fn to_socket_addrs(&self, _: sealed::Internal) -> Self::Future {
+            #[cfg(not(target_os = "popugos"))]
             use crate::blocking::spawn_blocking;
             use sealed::MaybeReady;
 
@@ -216,9 +230,19 @@ cfg_net! {
 
             let host = host.to_owned();
 
-            MaybeReady(sealed::State::Blocking(spawn_blocking(move || {
-                std::net::ToSocketAddrs::to_socket_addrs(&(&host[..], port))
-            })))
+            #[cfg(target_os = "popugos")]
+            {
+                return MaybeReady(sealed::State::ReadyMany(Some(
+                    std::net::ToSocketAddrs::to_socket_addrs(&(&host[..], port)),
+                )));
+            }
+
+            #[cfg(not(target_os = "popugos"))]
+            {
+                MaybeReady(sealed::State::Blocking(spawn_blocking(move || {
+                    std::net::ToSocketAddrs::to_socket_addrs(&(&host[..], port))
+                })))
+            }
         }
     }
 
@@ -284,6 +308,8 @@ pub(crate) mod sealed {
         #[derive(Debug)]
         pub(super) enum State {
             Ready(Option<SocketAddr>),
+            #[cfg(target_os = "popugos")]
+            ReadyMany(Option<io::Result<vec::IntoIter<SocketAddr>>>),
             Blocking(JoinHandle<io::Result<vec::IntoIter<SocketAddr>>>),
         }
 
@@ -302,6 +328,11 @@ pub(crate) mod sealed {
                     State::Ready(ref mut i) => {
                         let iter = OneOrMore::One(i.take().into_iter());
                         Poll::Ready(Ok(iter))
+                    }
+                    #[cfg(target_os = "popugos")]
+                    State::ReadyMany(ref mut result) => {
+                        let result = result.take().expect("PopugOS DNS future polled after completion");
+                        Poll::Ready(result.map(OneOrMore::More))
                     }
                     State::Blocking(ref mut rx) => {
                         let res = ready!(Pin::new(rx).poll(cx))?.map(OneOrMore::More);
