@@ -39,6 +39,19 @@ const MAX_TASKS_POLLED_PER_GLOBAL_QUEUE_INTERVAL: u32 = 127;
 /// This is the previous default
 const TARGET_TASKS_POLLED_PER_GLOBAL_QUEUE_INTERVAL: u32 = 61;
 
+#[cfg(target_os = "popugos")]
+fn pow_usize(mut base: f64, mut exponent: usize) -> f64 {
+    let mut result = 1.0;
+    while exponent != 0 {
+        if exponent & 1 != 0 {
+            result *= base;
+        }
+        base *= base;
+        exponent >>= 1;
+    }
+    result
+}
+
 impl Stats {
     pub(crate) fn new(worker_metrics: &WorkerMetrics) -> Stats {
         // Seed the value with what we hope to see.
@@ -106,7 +119,15 @@ impl Stats {
             let mean_poll_duration = elapsed / num_polls;
 
             // Compute the alpha weighted by the number of tasks polled this batch.
+            #[cfg(not(target_os = "popugos"))]
             let weighted_alpha = 1.0 - (1.0 - TASK_POLL_TIME_EWMA_ALPHA).powf(num_polls);
+            // PopugOS intentionally has no external libm yet. The exponent is
+            // an integer here, so exponentiation by squaring is equivalent and
+            // avoids pulling the C `pow` symbol into otherwise self-contained
+            // executables.
+            #[cfg(target_os = "popugos")]
+            let weighted_alpha =
+                1.0 - pow_usize(1.0 - TASK_POLL_TIME_EWMA_ALPHA, self.tasks_polled_in_batch);
 
             // Now compute the new weighted average task poll time.
             self.task_poll_time_ewma = weighted_alpha * mean_poll_duration

@@ -222,18 +222,6 @@ cfg_rt! {
         F: FnOnce() -> R + Send + 'static,
         R: Send + 'static,
     {
-        #[cfg(target_os = "popugos")]
-        {
-            // Felix/PopugOS does not yet provide an OS thread backend for
-            // std::thread::spawn. Schedule the closure as a normal Tokio task
-            // instead of entering the blocking thread pool. This is suitable
-            // for short bounded operations such as std::net DNS resolution.
-            return crate::task::spawn(async move { f() });
-        }
-
-        #[cfg(not(target_os = "popugos"))]
-        {
-            crate::runtime::spawn_blocking(f)
-        }
+        crate::runtime::spawn_blocking(f)
     }
 }
