@@ -261,6 +261,15 @@ cfg_net_unix! {
     }
 }
 
+#[cfg(all(target_os = "popugos", feature = "net"))]
+mod async_fd;
+
+#[cfg(all(target_os = "popugos", feature = "net"))]
+pub mod popugos {
+    //! Asynchronous file-descriptor I/O for PopugOS.
+    pub use super::async_fd::{AsyncFd, AsyncFdTryNewError, AsyncFdReadyGuard, AsyncFdReadyMutGuard, TryIoError};
+}
+
 cfg_io_std! {
     mod stdio_common;
 

@@ -100,6 +100,15 @@ impl Registration {
         self.handle().deregister_source(&self.shared, io)
     }
 
+    #[cfg(target_os = "popugos")]
+    pub(crate) fn reregister(
+        &self,
+        io: &mut impl Source,
+        interest: Interest,
+    ) -> io::Result<()> {
+        self.handle().reregister_source(&self.shared, io, interest)
+    }
+
     pub(crate) fn clear_readiness(&self, event: ReadyEvent) {
         self.shared.clear_readiness(event);
     }
