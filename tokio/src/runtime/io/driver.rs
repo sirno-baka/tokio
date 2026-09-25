@@ -93,6 +93,17 @@ cfg_net_unix!(
     }
 );
 
+#[cfg(target_os = "popugos")]
+impl ReadyEvent {
+    pub(crate) fn with_ready(&self, ready: Ready) -> Self {
+        Self {
+            ready,
+            tick: self.tick,
+            is_shutdown: self.is_shutdown,
+        }
+    }
+}
+
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub(super) enum Direction {
     Read,
